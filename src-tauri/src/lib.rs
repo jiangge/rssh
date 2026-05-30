@@ -189,6 +189,8 @@ pub fn run() {
             commands::window::open_tab_in_new_window,
             #[cfg(not(target_os = "android"))]
             commands::window::clipboard_read,
+            #[cfg(not(target_os = "android"))]
+            commands::window::clipboard_write,
             // external URL opener — cross-platform via tauri-plugin-opener
             commands::external::open_external_url,
             // update check (cross-platform — separate mod from window)

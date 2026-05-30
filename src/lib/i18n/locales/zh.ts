@@ -445,6 +445,7 @@ const zh: Messages = {
   "shortcut.tab.open_new_window": "在新窗口打开当前 Tab",
   "shortcut.tab.cycle": "在 Tab 之间循环切换",
   "shortcut.tab.exit_cycle": "退出 Tab 切换模式",
+  "shortcut.ai.toggle": "切换 AI 面板",
 
   // ── 后端错误（按错误码翻译） ──
   "error.unknown": "{message}",
@@ -665,6 +666,7 @@ const zh: Messages = {
   "shortcuts.search": "搜索",
   "shortcuts.snippet": "命令片段（发送到终端）",
   "shortcuts.open_sftp": "打开 SFTP（SSH 会话）",
+  "shortcuts.toggle_ai": "切换 AI 面板",
   "shortcuts.reconnect_disconnect": "断开后重连",
   "shortcuts.reconnect_error": "出错 / 停止后重连",
   // GitHub 同步
@@ -717,6 +719,14 @@ const zh: Messages = {
   "settings.shell.connection_logging": "连接日志",
   "settings.shell.verbose_log": "详细日志",
   "settings.shell.verbose_log_desc": "在终端显示详细的 SSH 握手与认证信息。",
+  "settings.shell.mouse": "选择与鼠标",
+  "settings.shell.copy_on_select": "选中即复制",
+  "settings.shell.copy_on_select_desc": "选中文本时自动复制到剪贴板。",
+  "settings.shell.right_click": "右键动作",
+  "settings.shell.right_click_desc": "右键终端时执行的动作。",
+  "settings.shell.right_click_menu": "系统菜单（默认）",
+  "settings.shell.right_click_paste": "粘贴",
+  "settings.shell.right_click_copy_paste": "有选区则复制，否则粘贴",
   // CLI 设置
   "settings.cli.installed": "已安装",
   "settings.cli.installed_to": "已安装到 {path}",

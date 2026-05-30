@@ -29,6 +29,7 @@
         [`${mod}+F`, t("shortcuts.search")],
         [`${mod}+S`, t("shortcuts.snippet")],
         [`${mod}+O`, t("shortcuts.open_sftp")],
+        [`${mod}+Shift+A`, t("shortcuts.toggle_ai")],
         ["Any key", t("shortcuts.reconnect_disconnect")],
       ],
     },

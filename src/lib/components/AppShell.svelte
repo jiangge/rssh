@@ -82,6 +82,21 @@
                 },
             },
             {
+                display: "⌘⇧A / Ctrl+Shift+A",
+                description: t("shortcut.ai.toggle"),
+                skipInSettings: true,
+                match: e => (e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "a",
+                handler: () => {
+                    // Close always works; open only on a connected terminal tab
+                    // (mirrors MobileKeybar's canOpenAi guard).
+                    if (ai.isOpen()) { ai.closePanel(); return; }
+                    const tab = app.activeTab();
+                    const canOpen = !!tab && (tab.type === "ssh" || tab.type === "local") && !!app.sessionIdForTab(tab.id);
+                    if (!canOpen) return false;
+                    ai.openPanel();
+                },
+            },
+            {
                 display: "Ctrl+Tab / Ctrl+Shift+Tab",
                 description: t("shortcut.tab.cycle"),
                 match: e => e.ctrlKey && e.key === "Tab",

@@ -41,3 +41,15 @@ pub fn clipboard_read() -> AppResult<String> {
     cb.get_text()
         .map_err(|e| AppError::other("window_clipboard_failed", serde_json::json!({ "op": "read", "err": e.to_string() })))
 }
+
+/// Write text to the system clipboard.
+/// Mirrors `clipboard_read`: goes through Rust (arboard) because in the
+/// WKWebView `navigator.clipboard.writeText` is unreliable from a right-click
+/// (contextmenu) / unfocused context — it silently rejects.
+#[tauri::command]
+pub fn clipboard_write(text: String) -> AppResult<()> {
+    let mut cb =
+        arboard::Clipboard::new().map_err(|e| AppError::other("window_clipboard_failed", serde_json::json!({ "op": "init", "err": e.to_string() })))?;
+    cb.set_text(text)
+        .map_err(|e| AppError::other("window_clipboard_failed", serde_json::json!({ "op": "write", "err": e.to_string() })))
+}

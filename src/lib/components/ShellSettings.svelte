@@ -4,6 +4,7 @@
   import * as app from "../stores/app.svelte.ts";
   import * as transfers from "../stores/transfers.svelte.ts";
   import { t } from "../i18n/index.svelte.ts";
+  import Select from "./Select.svelte";
 
   let shells = $state<string[]>([]);
   let selectedShell = $state("");
@@ -15,6 +16,13 @@
   let verboseLog = $state(true);
   let connectTimeout = $state(10);
   let commandBlockBar = $state(true);
+  let copyOnSelect = $state(false);
+  let rightClickAction = $state<app.RightClickAction>("menu");
+  let rightClickOptions = $derived([
+    { value: "menu", label: t("settings.shell.right_click_menu") },
+    { value: "paste", label: t("settings.shell.right_click_paste") },
+    { value: "copyPaste", label: t("settings.shell.right_click_copy_paste") },
+  ]);
   /** SFTP 并发上限。main.ts 启动时 loadMaxConcurrent 已写过 store，
    *  这里 onMount 再读一次显示当前值。 */
   let sftpMaxConcurrent = $state(transfers.maxConcurrent());
@@ -34,6 +42,8 @@
     const ts = await invoke<string | null>("get_setting", { key: "connect_timeout" });
     if (ts) connectTimeout = parseInt(ts, 10) || 10;
     commandBlockBar = await app.loadCommandBlockBar();
+    copyOnSelect = await app.loadCopyOnSelect();
+    rightClickAction = await app.loadRightClickAction();
     // SFTP 并发上限：main.ts 启动时已读过持久值进 store，但用户可能在打开 Settings 前
     // 还没 await 完。再读一次确保 input 显示真实当前值。
     await transfers.loadMaxConcurrent();
@@ -84,6 +94,14 @@
 
   async function saveCommandBlockBar() {
     await app.setCommandBlockBar(commandBlockBar);
+  }
+
+  async function saveCopyOnSelect() {
+    await app.setCopyOnSelect(copyOnSelect);
+  }
+
+  function saveRightClickAction(v: app.RightClickAction) {
+    void app.setRightClickAction(v);
   }
 
   async function saveSftpMaxConcurrent() {
@@ -167,6 +185,36 @@
     </label>
   </div>
 
+  <div class="section-label">{t("settings.shell.mouse")}</div>
+  <!-- 鼠标交互：选中即复制（开关）+ 右键动作（下拉）合在一张卡片，
+       "主行 + 分隔线 + 次行"结构，跟命令块卡片同款，避免两个控件割裂。 -->
+  <div class="card surface-raised mouse-card">
+    <div class="cmd-block-head">
+      <div class="cmd-block-head-body">
+        <div class="cmd-block-title" class:on={copyOnSelect} class:off={!copyOnSelect}>{t("settings.shell.copy_on_select")}</div>
+        <div class="cmd-block-desc">{t("settings.shell.copy_on_select_desc")}</div>
+      </div>
+      <label class="switch">
+        <input type="checkbox" bind:checked={copyOnSelect} onchange={saveCopyOnSelect} />
+        <span class="slider"></span>
+      </label>
+    </div>
+
+    <div class="card-divider"></div>
+
+    <div class="cmd-block-head">
+      <div class="cmd-block-head-body">
+        <label for="rca-select" class="cmd-block-title">{t("settings.shell.right_click")}</label>
+        <div class="cmd-block-desc">{t("settings.shell.right_click_desc")}</div>
+      </div>
+      <div class="rca-select">
+        <Select id="rca-select" bind:value={rightClickAction}
+                options={rightClickOptions}
+                onchange={(v) => saveRightClickAction(v as app.RightClickAction)} />
+      </div>
+    </div>
+  </div>
+
   <div class="section-label">{t("settings.shell.command_block")}</div>
   <!-- 命令块侧栏开关 + 启用后的快捷键提示合在一个 .card.surface-raised。
        关时只有开关行；开时分隔线下展开 tips，跟 .danger-card 同款"主开关 + 分隔 + 子内容"结构。 -->
@@ -208,7 +256,8 @@
   /* 卡片：复用全局 .card.surface-raised，本地只加 padding + 内布局，
      跟 GitHubSyncScreen / AiSettings 同款。 */
   .shell-card,
-  .cmd-block-card {
+  .cmd-block-card,
+  .mouse-card {
     padding: 18px;
     display: flex;
     flex-direction: column;
@@ -358,6 +407,9 @@
   .timeout-row input[type="number"] {
     width: 80px;
   }
+
+  /* 右键动作的下拉框：定宽，靠右，不被卡片行压缩。 */
+  .rca-select { width: 260px; flex-shrink: 0; }
   .timeout-hint {
     font-size: 11px; color: var(--text-dim);
   }

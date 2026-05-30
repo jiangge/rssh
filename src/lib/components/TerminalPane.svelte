@@ -446,6 +446,51 @@
         invoke(writeCmd, { sessionId, data: Array.from(new TextEncoder().encode(wrapped)) });
     }
 
+    function copySelection() {
+        const sel = terminal.getSelection();
+        if (sel) app.writeClipboard(sel);
+    }
+
+    /** Copy-on-select: fires on a real left-button mouse release on the terminal
+     *  host — covers drag, double- and triple-click. Bound to mouseup (NOT
+     *  terminal.onSelectionChange) so programmatic selections never hit the
+     *  clipboard: xterm fires onSelectionChange for selectLines()/selectAll()
+     *  too, and the block bar is a sibling subtree whose clicks don't bubble
+     *  here. The toggle is read live. */
+    function onSelectMouseUp(e: MouseEvent) {
+        if (e.button !== 0 || !app.copyOnSelect()) return;
+        if (terminal.hasSelection()) copySelection();
+    }
+
+    /** Terminal-area right-click, per app.rightClickAction():
+     *  - "menu": do nothing — let xterm's handler + the native system menu run
+     *    (this is the default "current menu").
+     *  - "paste": paste the clipboard.
+     *  - "copyPaste": copy the selection (if any) and clear it, else paste.
+     *
+     *  Registered in CAPTURE phase on the host so it runs BEFORE xterm's own
+     *  contextmenu handler (which is on a descendant, bubble phase). For the
+     *  non-menu modes we stopPropagation so xterm's rightClickHandler never runs:
+     *  on macOS it focuses the hidden <textarea> and selects a word, and that
+     *  editable-field focus is what makes WKWebView pop the native menu even
+     *  after preventDefault. Stopping it first lets preventDefault actually
+     *  suppress the menu. */
+    function onTerminalContextMenu(e: MouseEvent) {
+        if (app.isMobile) return; // mobile keeps the native long-press menu
+        const action = app.rightClickAction();
+        if (action === "menu") return; // let xterm + the native system menu through
+        e.preventDefault();
+        e.stopPropagation();
+        if (action === "paste") {
+            app.readClipboard().then(pasteText);
+        } else if (terminal.hasSelection()) {
+            copySelection();
+            terminal.clearSelection();
+        } else {
+            app.readClipboard().then(pasteText);
+        }
+    }
+
     function openSearch() {
         showSearch = true;
         requestAnimationFrame(() => searchInputEl?.focus());
@@ -876,6 +921,12 @@
             focus: () => terminal.focus(),
         });
 
+        // Copy-on-select (left-button mouseup) + right-click action (capture
+        // phase — required so preventDefault can suppress the native menu before
+        // xterm/WebView handle the event). See onSelectMouseUp / onTerminalContextMenu.
+        containerEl.addEventListener("mouseup", onSelectMouseUp);
+        containerEl.addEventListener("contextmenu", onTerminalContextMenu, { capture: true });
+
         // Intercept Ctrl/Cmd+F for search, Ctrl/Cmd+O for SFTP, Ctrl/Cmd+S for snippets
         terminal.attachCustomKeyEventHandler((e: KeyboardEvent) => {
             if (e.type !== "keydown") return true;
@@ -1025,6 +1076,8 @@
         unsubscribeTheme?.();
         window.removeEventListener("mousedown", onWindowMouseDown);
         window.removeEventListener("keydown", onWindowKeyDown);
+        containerEl?.removeEventListener("mouseup", onSelectMouseUp);
+        containerEl?.removeEventListener("contextmenu", onTerminalContextMenu, { capture: true });
         unlisteners.forEach(u => u());
         dataDisposable?.dispose();
         resizeDisposable?.dispose();

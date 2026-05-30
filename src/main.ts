@@ -2,6 +2,7 @@ import App from "./App.svelte";
 import { mount } from "svelte";
 import * as theme from "./lib/themes/store.svelte.ts";
 import * as transfers from "./lib/stores/transfers.svelte.ts";
+import * as app from "./lib/stores/app.svelte.ts";
 
 // Apply persisted theme before mount so first paint reflects the user's choice.
 // We don't await — startup paint blocks on the persisted lookup otherwise. The
@@ -14,6 +15,12 @@ theme.init();
 // 不影响功能。
 void transfers.loadMaxConcurrent();
 
-const app = mount(App, { target: document.getElementById("app")! });
+// Terminal interaction prefs (copy-on-select + right-click action). Global,
+// loaded once at startup so the first terminal honors persisted values without
+// waiting for the Settings screen. fire-and-forget like loadMaxConcurrent.
+void app.loadCopyOnSelect();
+void app.loadRightClickAction();
 
-export default app;
+const instance = mount(App, { target: document.getElementById("app")! });
+
+export default instance;

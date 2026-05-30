@@ -443,6 +443,7 @@ const en = {
   "shortcut.tab.open_new_window": "Open current Tab in a new window",
   "shortcut.tab.cycle": "Cycle through Tabs",
   "shortcut.tab.exit_cycle": "Exit Tab cycling mode",
+  "shortcut.ai.toggle": "Toggle AI panel",
 
   // ── Backend errors (translated by error code) ──
   "error.unknown": "{message}",
@@ -663,6 +664,7 @@ const en = {
   "shortcuts.search": "Search",
   "shortcuts.snippet": "Command Snippet (send to terminal)",
   "shortcuts.open_sftp": "Open SFTP (SSH session)",
+  "shortcuts.toggle_ai": "Toggle AI panel",
   "shortcuts.reconnect_disconnect": "Reconnect after disconnect",
   "shortcuts.reconnect_error": "Reconnect after error/stop",
   // GitHub sync
@@ -715,6 +717,14 @@ const en = {
   "settings.shell.connection_logging": "CONNECTION LOGGING",
   "settings.shell.verbose_log": "VERBOSE LOG",
   "settings.shell.verbose_log_desc": "Show detailed SSH handshake and authentication messages in terminal.",
+  "settings.shell.mouse": "Selection & mouse",
+  "settings.shell.copy_on_select": "Copy on select",
+  "settings.shell.copy_on_select_desc": "Automatically copy selected text to the clipboard.",
+  "settings.shell.right_click": "Right-click action",
+  "settings.shell.right_click_desc": "What right-clicking the terminal does.",
+  "settings.shell.right_click_menu": "System menu (default)",
+  "settings.shell.right_click_paste": "Paste",
+  "settings.shell.right_click_copy_paste": "Copy if selected, otherwise paste",
   // CLI settings
   "settings.cli.installed": "Installed",
   "settings.cli.installed_to": "Installed to {path}",

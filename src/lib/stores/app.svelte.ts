@@ -317,6 +317,17 @@ export async function readClipboard(): Promise<string> {
   return invoke<string>("clipboard_read").catch(() => "");
 }
 
+/** Write text to the system clipboard. On desktop goes through Rust (arboard)
+ *  — WKWebView's `navigator.clipboard.writeText` silently fails from a
+ *  right-click / unfocused context. Mobile uses the web API. */
+export async function writeClipboard(text: string): Promise<void> {
+  if (isMobile) {
+    await navigator.clipboard.writeText(text).catch(() => {});
+    return;
+  }
+  await invoke("clipboard_write", { text }).catch(() => {});
+}
+
 /* ─── Session registry (for broadcast) ─── */
 interface SessionEntry {
   tabId: string;
@@ -412,6 +423,51 @@ export async function setCommandBlockBar(v: boolean) {
   _commandBlockBar = v;
   _cbbLoaded = true;
   await invoke("set_setting", { key: "command_block_bar", value: String(v) });
+}
+
+/* ─── Copy selected terminal text on selection ─── */
+// Default false: never silently touch the clipboard unless the user opts in,
+// so encoding is inverted vs commandBlockBar (only an explicit "true" enables).
+let _copyOnSelect = $state(false);
+let _cosLoaded = false;
+export function copyOnSelect() { return _copyOnSelect; }
+export async function loadCopyOnSelect(): Promise<boolean> {
+  if (!_cosLoaded) {
+    _cosLoaded = true;
+    try {
+      const v = await invoke<string | null>("get_setting", { key: "copy_on_select" });
+      _copyOnSelect = v === "true";
+    } catch {}
+  }
+  return _copyOnSelect;
+}
+export async function setCopyOnSelect(v: boolean) {
+  _copyOnSelect = v;
+  _cosLoaded = true;
+  await invoke("set_setting", { key: "copy_on_select", value: String(v) });
+}
+
+/* ─── Terminal right-click action (single choice) ─── */
+// menu = keep the native system menu; paste = paste; copyPaste = copy the
+// selection if any, else paste (PuTTY convention).
+export type RightClickAction = "menu" | "paste" | "copyPaste";
+let _rightClickAction = $state<RightClickAction>("menu");
+let _rcaLoaded = false;
+export function rightClickAction() { return _rightClickAction; }
+export async function loadRightClickAction(): Promise<RightClickAction> {
+  if (!_rcaLoaded) {
+    _rcaLoaded = true;
+    try {
+      const v = await invoke<string | null>("get_setting", { key: "right_click_action" });
+      if (v === "paste" || v === "copyPaste" || v === "menu") _rightClickAction = v;
+    } catch {}
+  }
+  return _rightClickAction;
+}
+export async function setRightClickAction(v: RightClickAction) {
+  _rightClickAction = v;
+  _rcaLoaded = true;
+  await invoke("set_setting", { key: "right_click_action", value: v });
 }
 
 /* ─── Per-tab search pulse (context menu → TerminalPane.openSearch) ─── */
