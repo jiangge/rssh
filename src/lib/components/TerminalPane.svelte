@@ -697,8 +697,10 @@
             const top = Math.max(minTop, Math.min(maxTop, containerTop));
 
             // xterm keeps this textarea far off-screen by default. On mobile
-            // WebView, focusing/typing into that off-screen control can pan the
-            // page while fixed chrome stays put. Keep it invisible but in-view.
+            // WebView, focusing it makes the page pan to reveal it, and the IME
+            // composition/candidate UI anchors to its position — so off-screen
+            // means a yanked page and a misplaced input popup. Keep it invisible
+            // but in-view. (Layout-independent: not about any fixed chrome.)
             helper.style.position = "fixed";
             helper.style.left = "1px";
             helper.style.top = `${Math.round(top)}px`;
@@ -880,7 +882,7 @@
     onMount(async () => {
         terminal = new Terminal({
             cursorBlink: true,
-            fontSize: 13,
+            fontSize: theme.termFontSize(),
             fontFamily: theme.currentTermFontStack(),
             allowProposedApi: true,
             theme: theme.currentTermTheme(),
@@ -907,13 +909,14 @@
         terminal.unicode.activeVersion = "11";
         fitAddon.fit();
 
-        // Terminal font: prepend the user's chosen family to the base stack.
-        // Registered after open()+fit() because the immediate callback refits,
-        // which needs fitAddon to exist. Font changes alter cell metrics, so
-        // (unlike theme) we must refit after applying.
-        unsubscribeFont = theme.registerXtermFontListener((stack) => {
+        // Terminal font: the chosen family (prepended to the base stack) and
+        // pixel size. Registered after open()+fit() because the immediate
+        // callback refits, which needs fitAddon to exist. Both fields alter
+        // cell metrics, so (unlike theme) we must refit after applying.
+        unsubscribeFont = theme.registerXtermFontListener((font) => {
             if (!terminal) return;
-            terminal.options.fontFamily = stack;
+            terminal.options.fontFamily = font.family;
+            terminal.options.fontSize = font.size;
             fitAddon?.fit();
         });
 
