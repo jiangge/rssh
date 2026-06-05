@@ -37,6 +37,12 @@ pub fn delete_forward(state: State<AppState>, id: String) -> Result<(), AppError
 
 #[tauri::command]
 pub async fn forward_start(state: State<'_, AppState>, forward_id: String) -> AppResult<String> {
+    forward_start_impl(&state, forward_id).await
+}
+
+/// Transport-agnostic body shared by the Tauri command and the headless server.
+/// Forwarding emits no events, so it needs no `Host` — only `AppState`.
+pub async fn forward_start_impl(state: &AppState, forward_id: String) -> AppResult<String> {
     let f = crate::db::forward::get(&state.db, &forward_id)?;
     let p = crate::db::profile::get(&state.db, &f.profile_id).map_err(|e| match e {
         AppError::NotFound(_) => AppError::not_found("fwd_profile_not_found", json!({})),
@@ -69,20 +75,20 @@ pub async fn forward_start(state: State<'_, AppState>, forward_id: String) -> Ap
         chain.push((hop, bc));
     }
     let known_hosts_path = crate::ssh::known_hosts::path_for(&state.data_dir);
-    let host = p.host.clone();
-    let port = p.port;
+    let target = fwd::ConnTarget {
+        host: p.host.clone(),
+        port: p.port,
+        credential: c,
+        bastion_chain: chain,
+        known_hosts_path,
+        timeout_secs,
+    };
     let kind = f.forward_type;
     let handle = crate::ssh::client::run_blocking_ssh(move || async move {
         match kind {
-            ForwardType::Local => {
-                fwd::start_local(f, host, port, c, chain, known_hosts_path, timeout_secs).await
-            }
-            ForwardType::Remote => {
-                fwd::start_remote(f, host, port, c, chain, known_hosts_path, timeout_secs).await
-            }
-            ForwardType::Dynamic => {
-                fwd::start_dynamic(f, host, port, c, chain, known_hosts_path, timeout_secs).await
-            }
+            ForwardType::Local => fwd::start_local(f, target).await,
+            ForwardType::Remote => fwd::start_remote(f, target).await,
+            ForwardType::Dynamic => fwd::start_dynamic(f, target).await,
         }
     })
     .await?;

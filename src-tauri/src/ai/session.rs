@@ -12,7 +12,6 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use serde_json::json;
-use tauri::{AppHandle, Emitter};
 use tokio::sync::{mpsc, Notify};
 
 use crate::error::{AppError, AppResult};
@@ -192,7 +191,7 @@ impl PendingSession {
 ///     g.insert(tab_id, pending.launch());
 /// }
 /// ```
-pub fn start(cfg: SessionConfig, app: AppHandle) -> AppResult<PendingSession> {
+pub fn start(cfg: SessionConfig, app: crate::emitter::Host) -> AppResult<PendingSession> {
     // system_prompt 是静态文本（rules + user-skill catalog + locale + 平台），
     // 整段不含运行期数据 —— 启动期一次性脱敏并缓存，避免每个 dialogue turn
     // 重跑一遍 regex。redact_rules 在会话生命周期内不变，所以安全。
@@ -243,7 +242,7 @@ pub(in crate::ai::session) struct Actor {
     pub(in crate::ai::session) history: Vec<ChatMessage>,
     action_rx: mpsc::UnboundedReceiver<UserAction>,
     audit: Arc<Mutex<AuditLog>>,
-    app: AppHandle,
+    app: crate::emitter::Host,
     cancel_slot: Arc<Mutex<Option<Arc<Notify>>>>,
     /// 远端 file_ops 能力 — lazy 探测，session 内缓存。
     /// None = 还没探测；Some = 已探测，结果有效到 session 结束。
@@ -626,6 +625,19 @@ impl Actor {
         }
     }
 
+    /// Record a command/card rejection: audit it and emit `command_rejected`
+    /// so the front-end clears the pending card. The emit is load-bearing —
+    /// forgetting it strands the card in `pending` forever (the bug once hit
+    /// on patch_file sub-cards). Centralising it here means no caller can
+    /// forget. `id` is the proposal/card id, not the tool_call id.
+    pub(in crate::ai::session) fn record_rejection(&self, id: &str, reason: &str) {
+        self.audit_push(AuditKind::CommandRejected {
+            id: id.to_string(),
+            reason: reason.to_string(),
+        });
+        self.emit("command_rejected", json!({ "id": id, "reason": reason }));
+    }
+
     async fn handle_load_skill(&mut self, tc: ToolCall) -> AppResult<ChatMessage> {
         let input: LoadSkillInput = match serde_json::from_value(tc.input.clone()) {
             Ok(i) => i,
@@ -741,19 +753,7 @@ impl Actor {
 
         match self.wait_command_outcome(&tc.id).await? {
             CommandOutcome::Rejected { reason } => {
-                self.audit_push(AuditKind::CommandRejected {
-                    id: dl_id.clone(),
-                    reason: reason.clone(),
-                });
-                // Unified rejection signal across all tool kinds — front-end
-                // listener clears pending + sets ChatItem.rejected on this event.
-                self.emit(
-                    "command_rejected",
-                    json!({
-                        "id": dl_id,
-                        "reason": reason.clone(),
-                    }),
-                );
+                self.record_rejection(&dl_id, &reason);
                 return Ok(self.make_tool_error(
                     &tc.id,
                     &format!("User rejected download_file. Reason: {reason}."),
@@ -917,17 +917,7 @@ impl Actor {
         let started_at = std::time::Instant::now();
         match self.wait_command_outcome(&tc.id).await? {
             CommandOutcome::Rejected { reason } => {
-                self.audit_push(AuditKind::CommandRejected {
-                    id: card_id.clone(),
-                    reason: reason.clone(),
-                });
-                self.emit(
-                    "command_rejected",
-                    json!({
-                        "id": card_id,
-                        "reason": reason.clone(),
-                    }),
-                );
+                self.record_rejection(&card_id, &reason);
                 return Ok(self.make_tool_error(
                     &tc.id,
                     &format!("User rejected analyze_locally. Reason: {reason}."),
@@ -982,13 +972,7 @@ impl Actor {
 
         #[cfg(desktop)]
         {
-            use tauri::{WebviewUrl, WebviewWindowBuilder};
-            if let Err(e) = WebviewWindowBuilder::new(&self.app, &label, WebviewUrl::App("index.html".into()))
-                .title("RSSH — Local Analysis")
-                .inner_size(1200.0, 800.0)
-                .initialization_script(&init_script)
-                .build()
-            {
+            if let Err(e) = self.app.open_app_window(&label, "RSSH — Local Analysis", &init_script) {
                 emit_done(self, 1, format!("打开分析窗口失败：{e}"));
                 return Ok(self.make_tool_error(
                     &tc.id,
@@ -1083,17 +1067,7 @@ impl Actor {
                     tool_call_id,
                     reason,
                 } if tool_call_id == tc.id => {
-                    self.audit_push(AuditKind::CommandRejected {
-                        id: cmd_id.clone(),
-                        reason: reason.clone(),
-                    });
-                    self.emit(
-                        "command_rejected",
-                        json!({
-                            "id": cmd_id.clone(),
-                            "reason": reason.clone(),
-                        }),
-                    );
+                    self.record_rejection(&cmd_id, &reason);
                     return Ok(self.make_tool_error(
                         &tc.id,
                         &format!("User rejected the command. Reason: {reason}. Adjust your plan based on this reason."),
