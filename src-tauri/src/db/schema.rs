@@ -190,7 +190,7 @@ pub fn migrate(conn: &Connection) -> AppResult<()> {
             conn.execute_batch(
                 "
                 INSERT INTO ai_command_blacklist (name, category) VALUES
-                  ('rm','destructive'),('dd','destructive'),('mkfs','destructive'),
+                  ('rm','destructive'),('unlink','destructive'),('dd','destructive'),('mkfs','destructive'),
                   ('iptables','destructive'),('ip6tables','destructive'),('shutdown','destructive'),
                   ('reboot','destructive'),('halt','destructive'),('poweroff','destructive'),
                   ('kill','destructive'),('pkill','destructive'),('killall','destructive'),

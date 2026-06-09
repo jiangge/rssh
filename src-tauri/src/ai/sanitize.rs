@@ -175,6 +175,7 @@ pub enum ShapeError {
 #[cfg(test)]
 pub const DESTRUCTIVE: &[&str] = &[
     "rm",
+    "unlink",
     "dd",
     "mkfs",
     "iptables",
@@ -216,7 +217,7 @@ pub const WRITE_VERBS: &[&str] = &[
 /// **family thinking**：每次给黑名单加新命令时，主动想 "它有 alias / variant 吗?"
 /// - macOS brew 装的 gnu-coreutils 一律 `g` 前缀（`gcp` / `gmv` / `gsed` / `gawk` ...）
 /// - GNU awk 实现有多种：`gawk` / `mawk` / `nawk`
-/// - 同语义不同名：`unlink` ≡ `rm` 单文件，`nvim`/`view` ≡ `vi`
+/// - 同语义不同名：`nvim`/`view` ≡ `vi`
 ///
 /// 不在这里的（已在主黑名单按枚举覆盖）：
 /// - python: `python` / `python2` / `python3` 直接列进 INTERPRETERS_DENIED
@@ -517,7 +518,7 @@ fn check_command(cmd: &tree_sitter::Node, src: &[u8], bl: &Blacklist) -> Result<
     // wrapper 透明跳过：依次吞掉 wrapper 名 + 它的 flag/value，args 第一个非 flag word
     // 视为真正命令头。env -S 之类 deferred-exec 在这里直接 Err。
     let (head, head_args_start) = strip_wrappers(&raw_head, &arg_strings)?;
-    // alias 归一（`gsed` → `sed`，`unlink` → `rm`，`nvim` → `vi`...），单一抽象层
+    // alias 归一（`gsed` → `sed`，`nvim` → `vi`...），单一抽象层
     // 取代散落的 family 列表。
     let head = canonical_head(head);
 
@@ -1871,9 +1872,10 @@ mod tests {
     }
 
     #[test]
-    fn shape_unlink_aliased_to_rm() {
-        // unlink(2) 系统调用对应的 unlink(1) 命令：单文件删除，等同 `rm file`。
-        // 不归一会漏拦。
+    fn shape_unlink_destructive_not_aliased() {
+        // unlink(1) 删单文件 = destructive。它作为独立黑名单条目被拦
+        // （DESTRUCTIVE const 表 / schema seed 都各列一条），而不是 alias 归一成
+        // rm —— 命令头保持 `unlink`，但照样拦。带路径形式同 `/bin/rm` 一样归一。
         assert!(matches!(
             validate("unlink /etc/passwd"),
             Err(ShapeError::Destructive(_))
