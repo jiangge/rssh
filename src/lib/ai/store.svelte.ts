@@ -463,6 +463,15 @@ export async function executeCommand(
   target_kind: AiTargetKind,
   target_session_id: string,
 ): Promise<void> {
+  // Re-entrancy guard: a tool_call_id must never be pasted twice. A
+  // CommandConfirmDialog remount (AI panel close→reopen mid-run) loses its local
+  // `executing` flag and can fire approve() again; without this, the command
+  // (possibly rm/reboot) would be pasted a second time and the first exec's
+  // listener + timer would leak when `_runningExecutions.set` below overwrites
+  // the entry. The map is the single source of truth for "in flight" — honor it.
+  // The original exec keeps running and still funnels through finish().
+  if (_runningExecutions.has(proposed.tool_call_id)) return;
+
   // Transport per kind. Record<AiTargetKind, …> so adding a kind is a compile
   // error here until routed — no silent fall-through to the wrong write command.
   const TRANSPORT: Record<AiTargetKind, { write: string; data: string }> = {
@@ -514,6 +523,14 @@ export async function executeCommand(
     },
   };
 
+  // Reserve the in-flight slot synchronously, BEFORE any await. The guard at the
+  // top of this function only holds if check-and-reserve is atomic. This set used
+  // to live after `await listen()` below, leaving a window where a second call
+  // (dialog remount re-firing approve, a double-click) passed the guard before
+  // this ran and pasted the command — possibly rm/reboot — twice. There is no
+  // await between the guard and here, so the reservation closes that window.
+  _runningExecutions.set(exec.toolCallId, exec);
+
   const finish = async (output: string, exit_code: number, timed_out: boolean) => {
     if (exec.resolved) return;
     exec.resolved = true;
@@ -535,18 +552,23 @@ export async function executeCommand(
     resolveDone();
   };
 
-  exec.unlisten = await listen<number[]>(dataEvent, (e) => {
-    if (exec.resolved) return;
-    const chunk = new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(e.payload));
-    exec.buffer.append(chunk);
-    // Serial has no sentinel — just accumulate. Completion comes from the user
-    // (submit, wired to the terminate button) or the safety timeout below.
-    if (target_kind === "serial") return;
-    const hit = findSentinel(exec.buffer.view(), proposed.sentinel);
-    if (hit) void finish(hit.output, hit.exitCode, false);
-  });
-
-  _runningExecutions.set(exec.toolCallId, exec);
+  try {
+    exec.unlisten = await listen<number[]>(dataEvent, (e) => {
+      if (exec.resolved) return;
+      const chunk = new TextDecoder("utf-8", { fatal: false }).decode(new Uint8Array(e.payload));
+      exec.buffer.append(chunk);
+      // Serial has no sentinel — just accumulate. Completion comes from the user
+      // (submit, wired to the terminate button) or the safety timeout below.
+      if (target_kind === "serial") return;
+      const hit = findSentinel(exec.buffer.view(), proposed.sentinel);
+      if (hit) void finish(hit.output, hit.exitCode, false);
+    });
+  } catch (e) {
+    // listen() failed to register: release the slot reserved above so this
+    // tool_call_id isn't wedged "in flight" forever.
+    _runningExecutions.delete(exec.toolCallId);
+    throw e;
+  }
 
   // \r (not \n) is the cross-platform Enter byte: ConPTY/PowerShell only
   // accepts \r; Unix cooked PTY translates \r → \n via ICRNL. Matches the
