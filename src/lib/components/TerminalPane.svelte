@@ -247,6 +247,25 @@
     const coloredBlockIds = new SvelteSet<number>();
     let selectionAnchorId: number | null = null;
 
+    // 自动染色：开关开着时，每个新块一出现就自动染（等价于自动右键"染色"）。
+    // 块 id 单调递增、永不复用，用一个水位线整数记"已自动处理到哪"，保证每块只自动
+    // 染一次——右键"取消染色"删掉的块 id 在水位线之下，不会被下一帧重新染回来。
+    // 中途打开开关时，存量块（id > 水位线）也会被一并染上。
+    let autoColoredHwm = 0;
+    // blockListRevision 只在块集合真正增删时自增（见 blockTracker.onChange），不像
+    // paintTick 每次滚动/渲染都跳 —— 否则开着自动染色时每帧都要空扫一遍所有块。
+    let blockListRevision = $state(0);
+    $effect(() => {
+        blockListRevision; // 仅块集合变化时重算
+        if (!app.autoColorBlocks() || !blockTracker) return;
+        let maxId = autoColoredHwm;
+        for (const b of blockTracker.blocks) {
+            if (b.id > autoColoredHwm) coloredBlockIds.add(b.id);
+            if (b.id > maxId) maxId = b.id;
+        }
+        autoColoredHwm = maxId;
+    });
+
     function handleBlockClick(r: BlockRect, ev: MouseEvent) {
         if (ev.shiftKey) rangeSelectTo(r);
         else if (ev.metaKey || ev.ctrlKey) toggleSelect(r);
@@ -1201,6 +1220,7 @@
         blockTracker = createCommandBlockTracker(terminal);
         blockTracker.onChange(() => {
             paintTick++;
+            blockListRevision++;
             // 剪枝：被 GC 的块从所有引用它 id 的集合里清掉，anchor 失效也复位。
             if (!blockTracker) return;
             if (selectedBlockIds.size === 0 && coloredBlockIds.size === 0 && selectionAnchorId === null) return;
@@ -1233,6 +1253,7 @@
         try { hlRules = await app.loadHighlights(); buildCompiledRules(hlRules); } catch {}
         hlEverLoaded = true;
         await app.loadCommandBlockBar();
+        await app.loadAutoColorBlocks();
 
         // Connect
         await connectAndWire();
